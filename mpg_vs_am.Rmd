@@ -1,0 +1,130 @@
+---
+fontsize: 9pt
+header-includes: \usepackage{graphicx}
+output: pdf_document
+---
+## MTCARS MPG Analysis using Regression Models & Statistical Inference  
+
+#### Executive Summary
+This report will examine the relationships between variables contained in the 'mtcars' data set and the MPG performance of the cars. Specifically, the report will attempt to answer the following questions:
+
+1. Is an automatic or manual transmission better for MPG?
+2. Quantify the MPG difference between the automatic and manual transmission.
+
+#### About the data
+The mtcars dimension includes 32 observations and 11 variables. See the help(mtcars) in R for details of the dataset variables. 
+
+There are 3 variables (**mpg**, **hp** and **qsec**) which I assume are **outcomes of all other variables**. The variable list also has variables (**cyl**, **vs**, **am**, **gear** & **carb**) in numeric form which should be treated as factors. So prior to any analysis, we convert these into factors.
+
+#### Exploratory Analysis 
+From a previous analysis in class, we know weight will be a factor in the **mpg** performance. The __am__ variable will be included  since the point of this report is to investigate the impact of the transmission type.
+
+See **Appendix A** for the relationships between these 2 regressors against **mpg**. The quantiles suggest some difference between the transmission types but their mpg range also shows overlaps (__See Appendix B__).
+
+```{r global_options,echo=FALSE, message=FALSE,warning=FALSE}
+knitr::opts_chunk$set(fig.width=6, fig.height=4, fig.align='center', dpi=100,
+                      echo=FALSE, warning=FALSE, message=FALSE)
+library(car)
+library(dplyr)
+require(graphics)
+data(mtcars)
+# designate mtcars as x (i.e. regressor)
+x <- mtcars
+x$cyl = as.factor(x$cyl)
+x$vs = as.factor(x$vs)
+x$am = as.factor(x$am)
+x$gear = as.factor(x$gear)
+x$carb = as.factor(x$carb)
+```
+
+#### Model Selection Strategy
+To select the appropriate regressors, we take the following steps:  
+**(1)** Use VIF values to filter highly colinear regressors.
+**(2)** identify variables using corelation that can represent others.
+**(3)** formulate the models using the final regressor selection.Note: **wt** and **am** will be included regardless of their VIF and colinear results.
+**(4)** Finally, use the Anova test to determine which models have better fit.
+
+#### (1) Variable Inflation Test  
+Use __sqrt(vif)__ to identify variables with inflationary impact on other variables. 
+```{r message=FALSE,warning=FALSE,echo=FALSE}
+v <- lm(mpg ~ .,data=x); vif(v)[,c("GVIF^(1/(2*Df))")]
+```
+
+This list suggests  **disp** (7.8), **hp** (5.3), **wt**(4.8) have high colinearity against all other variables. Remove disp (highest). Also remove performance indicator types hp and qsec. And check the vif again.  
+
+**Note on hp and qsec variable context**: both variables measure performance as a result of other design inputs. One doesn't specify, for example a 10-second qsec as part of a design. It is rather a goal or a result of the car design. So, it does not have practical predictive value but can indicate performance of another (e.g. mpg, hp), post design. Therefore, both variables are excluded from the model.
+
+
+```{r, size="tiny", echo=FALSE}
+v <- lm(mpg ~ wt + cyl + drat + vs + am + gear + carb,data=x); vif(v)[,c("GVIF^(1/(2*Df))")]
+```
+
+VIF values for the remaining variables have all dropped below 3. 
+
+#### (2) Colinearity Test
+Use cyl to verify representation of other variables.
+```{r message=FALSE, warning=FALSE, echo=FALSE}
+xminimal <- mtcars %>% select(mpg,wt,cyl,drat,vs,am,gear,carb)
+cor(xminimal)[c("cyl"),]
+```
+
+cyl's correlation to __wt, drat, vs, am__ and __carb__ is above 0.5 (|cor| > 0.5). I contend that using **cyl** can represent these other regressors which allows removing them without significantly increasing the residuals.
+
+#### (3) Model Selected
+
+Build the model with variables,  __wt + am + cyl__ as regressors. Then compare against models that include other regressors.
+
+```{r echo=TRUE, results='hide'}
+f1 <- lm(mpg ~ wt + am,data=x)
+f2 <- update(f1,mpg ~ wt + am + cyl)
+f3 <- update(f1,mpg ~ wt + am + cyl + vs)
+f4 <- update(f1,mpg ~ wt + am + cyl + carb + drat)
+anova(f1,f2,f3,f4) 
+```
+
+#### (4) Anova Test
+The anova results (see **Appendix C**)indicate that **f2 (mpq ~ wt + am + cyl)** is a minimal adequate model with p-value (0.007196) indicating significant at $\alpha = 0.01$. Adding more regressors negates the significance.
+
+#### Validating the Model Fitness
+First, the model's $R^2$ explains 83.75% of the mpg performance (**see Appendix F**). Second, the residual plot (see **Appendix D**) shows adequate coverage with no discernable pattern that may indicate a missing confounding variable. And third, the residual QQ plot (**Appendix E**)  follows the diagonal line suggesting a nearly normal residual distribution.
+
+#### Interpreting the Model
+See **Appendix F** for the Model Summary values.  
+
+The model calculates the combined intercept for factors, Automatic Transmission (am0) and 4 cylinders (cyl4), at 33.75mpg. This is the empirical mean for both am0 and cyl4. **Manual transmission improves the mpg performance by only 0.15mpg. But this is not significant and may be due to chance**. 6-cylinder (cyl6) and 8-cylinder (cyl8) factors on the other hand, decreases mpg performance by 4.26mpg and 6.08mpg respectively. And every 1,000 lbs increase in weight results in a 3.15mpg loss.  
+
+So, does a manual transmission result in better mileage than an automatic one? In this model, the answer is no. Other confounding variables explains mpg performance more than the transmission type. 
+\newpage  
+
+#### Appendix A - Data Exploration - Relationship of wt + am to mpg
+``` {r}
+coplot(mpg ~ wt | am, data = x,
+       panel = panel.smooth, rows = 1)
+```
+
+#### Appendix B - Data Exploration - Transmission Box plot against MPG
+```{r}
+boxplot(mpg~am,data=mtcars,main="Car Mileage Data", xlab="Transmission 0-Manual / 1-Auto", ylab="Miles per Gallon")
+```
+
+#### Appendix C - Anova Results
+```{r}
+anova(f1,f2,f3,f4) 
+```
+
+#### Appendix D - Residual Plot for Model mpg ~ wt + am + cyl
+
+```{r}
+plot(fitted(f2),residuals(f2), xlab="Fitted values",ylab="Residuals", abline(h=0,lty=2))
+```
+
+#### Appendix E - QQ Plot of Residuals
+```{r}
+qqnorm(resid(f2))
+qqline(resid(f2))
+```
+
+#### Appendix F - Linear Model Summary of mpg ~ wt + am + cyl
+```{r}
+summary(f2)
+```
